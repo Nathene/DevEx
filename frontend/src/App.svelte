@@ -1,79 +1,180 @@
 <script>
-  import logo from './assets/images/logo-universal.png'
-  import {Greet} from '../wailsjs/go/main/App.js'
+  import { onMount } from 'svelte';
+  import { 
+    GetCPUInfo, 
+    GetCPUDetails,
+    GetRAMInfo, 
+    GetRAMDetails,
+    GetDiskInfo,
+    GetDiskDetails
+  } from '../wailsjs/go/main/App.js';
 
-  let resultText = "Please enter your name below 👇"
-  let name
+  let cpuInfo = "Loading...";
+  let ramInfo = "Loading...";
+  let diskInfo = "Loading...";
 
-  function greet() {
-    Greet(name).then(result => resultText = result)
+  // Helper function to extract percentage from info string
+  function getPercentage(info) {
+    const match = info.match(/(\d+\.?\d*)/);
+    return match ? parseFloat(match[0]) : 0;
   }
+
+  // Helper function to determine status class based on percentage
+  function getStatusClass(percentage) {
+    if (percentage >= 80) return 'critical';
+    if (percentage >= 60) return 'warning';
+    return 'normal';
+  }
+
+  onMount(() => {
+    const updateInfo = async () => {
+      cpuInfo = await GetCPUInfo();
+      ramInfo = await GetRAMInfo();
+      diskInfo = await GetDiskInfo();
+    };
+
+    updateInfo();
+    const interval = setInterval(updateInfo, 2000);
+    return () => clearInterval(interval);
+  });
 </script>
 
-<main>
-  <img alt="Wails logo" id="logo" src="{logo}">
-  <div class="result" id="result">{resultText}</div>
-  <div class="input-box" id="input">
-    <input autocomplete="off" bind:value={name} class="input" id="name" type="text"/>
-    <button class="btn" on:click={greet}>Greet</button>
+<main class="app-container">
+  <nav class="navbar">
+    <button class="nav-btn">Home</button>
+    <button class="nav-btn">About</button>
+    <button class="nav-btn">Contact</button>
+  </nav>
+  <div class="content">
+    <h3>System Information</h3>
+    <div class="system-info-container">
+      <div class="system-info">
+        <div class="info-bubble {getStatusClass(getPercentage(cpuInfo))}" 
+             title={cpuInfo}>
+          {cpuInfo}
+        </div>
+        <div class="info-bubble {getStatusClass(getPercentage(ramInfo))}" 
+             title={ramInfo}>
+          {ramInfo}
+        </div>
+        <div class="info-bubble {getStatusClass(getPercentage(diskInfo))}" 
+             title={diskInfo}>
+          {diskInfo}
+        </div>
+      </div>
+    </div>
+    <h3>Network Information</h3>
+    <div class="system-info-container">
+      <div class="system-info">
+        <div class="info-bubble">Network Info</div>
+        <div class="info-bubble">Network Info</div>
+        <div class="info-bubble">Network Info</div>
+      </div>
+    </div>
+      <h3>Applications</h3>
+      <div class="system-info-container">
+        <div class="system-info">
+          <div class="info-bubble">App Info</div>
+          <div class="info-bubble">App Info</div>
+          <div class="info-bubble">App Info</div>
+        </div>
   </div>
 </main>
 
 <style>
-
-  #logo {
-    display: block;
-    width: 50%;
-    height: 50%;
-    margin: auto;
-    padding: 10% 0 0;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-    background-origin: content-box;
+  .info-bubble {
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    min-width: 100px;
+    flex: 1;
+    cursor: help;
+    transition: all 0.2s ease;
+    color: white;
   }
 
-  .result {
-    height: 20px;
-    line-height: 20px;
-    margin: 1.5rem auto;
+  .info-bubble:hover {
+    transform: scale(1.05);
   }
 
-  .input-box .btn {
-    width: 60px;
-    height: 30px;
-    line-height: 30px;
-    border-radius: 3px;
+  .info-bubble.normal {
+    background-color: #007bff;
+  }
+
+  .info-bubble.warning {
+    background-color: #ffa500;
+  }
+
+  .info-bubble.critical {
+    background-color: #ff4444;
+  }
+
+
+  .app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+  }
+
+  .navbar {
+    width: 200px;
+    height: 100vh;
+    background-color: #333;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    position: fixed;
+    left: 0;
+    top: 0;
+  }
+
+  .nav-btn {
+    padding: 10px;
+    margin: 5px 0;
     border: none;
-    margin: 0 0 0 20px;
-    padding: 0 8px;
+    border-radius: 5px;
+    background-color: #007bff;
+    color: white;
     cursor: pointer;
   }
 
-  .input-box .btn:hover {
-    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
-    color: #333333;
+  .nav-btn:hover {
+    background-color: #0056b3;
   }
 
-  .input-box .input {
-    border: none;
-    border-radius: 3px;
-    outline: none;
-    height: 30px;
-    line-height: 30px;
-    padding: 0 10px;
-    background-color: rgba(240, 240, 240, 1);
-    -webkit-font-smoothing: antialiased;
+  .content {
+    flex: 1;
+    margin-left: 220px;
+    padding: 20px;
+    overflow-y: auto;
   }
 
-  .input-box .input:hover {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
+  .system-info-container {
+    background-color: #f0f0f0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    width: calc(100% - 40px);
   }
 
-  .input-box .input:focus {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
+  .system-info {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 20px;
   }
 
+  .info-bubble {
+    background-color: #007bff;
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    min-width: 100px;
+    flex: 1;
+  }
 </style>
