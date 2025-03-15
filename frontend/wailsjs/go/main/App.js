@@ -18,10 +18,26 @@ export function GetDiskInfo() {
   return window['go']['main']['App']['GetDiskInfo']();
 }
 
+export function GetDockerMetrics() {
+  return window['go']['main']['App']['GetDockerMetrics']();
+}
+
+export function GetDockerStatus() {
+  return window['go']['main']['App']['GetDockerStatus']();
+}
+
+export function GetNetworkStatus() {
+  return window['go']['main']['App']['GetNetworkStatus']();
+}
+
 export function GetRAMDetails() {
   return window['go']['main']['App']['GetRAMDetails']();
 }
 
 export function GetRAMInfo() {
   return window['go']['main']['App']['GetRAMInfo']();
+}
+
+export function Shutdown() {
+  return window['go']['main']['App']['Shutdown']();
 }

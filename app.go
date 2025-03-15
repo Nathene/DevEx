@@ -2,116 +2,77 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"math"
-	"time"
+	_ "net/http/pprof"
 
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/disk"
-	"github.com/shirou/gopsutil/mem"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"DevEx/internal/docker"
+	"DevEx/internal/network"
+	"DevEx/internal/system"
 )
 
 // App struct
 type App struct {
-	ctx    context.Context
-	ticker *time.Ticker
+	ctx context.Context
 }
 
+// NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{}
 }
 
-// Add after the NewApp() function
+// startup is called when the app starts. The context is saved
+// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	// Create a ticker that ticks every 2 seconds
-	a.ticker = time.NewTicker(2 * time.Second)
-
-	// Start the update loop in a goroutine
-	go func() {
-		for {
-			select {
-			case <-a.ctx.Done():
-				if a.ticker != nil {
-					a.ticker.Stop()
-				}
-				return
-			case <-a.ticker.C:
-				// The frontend will poll for updates, so we don't need to emit events
-				continue
-			}
-		}
-	}()
 }
 
-func formatBytes(bytes uint64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := uint64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-// GetCPUInfo returns formatted CPU information
+// GetCPUInfo returns formatted CPU usage percentage
 func (a *App) GetCPUInfo() string {
-	cpuPercent, err := cpu.Percent(0, false)
-	if err != nil {
-		return "CPU: Error"
-	}
-	if len(cpuPercent) == 0 {
-		return "CPU: No data"
-	}
-	return fmt.Sprintf("CPU: %.1f%%", math.Round(cpuPercent[0]*10)/10)
+	return system.GetCPUInfo()
 }
 
 // GetCPUDetails returns detailed CPU information
 func (a *App) GetCPUDetails() string {
-	cores, _ := cpu.Counts(false)
-	threads, _ := cpu.Counts(true)
-	return fmt.Sprintf("Cores: %d\nThreads: %d", cores, threads)
+	return system.GetCPUDetails()
 }
 
-// GetRAMInfo returns formatted RAM usage
+// GetRAMInfo returns formatted RAM usage percentage
 func (a *App) GetRAMInfo() string {
-	memInfo, err := mem.VirtualMemory()
-	if err != nil {
-		return "RAM: Error"
-	}
-	return fmt.Sprintf("RAM: %.1f%%", math.Round(memInfo.UsedPercent*10)/10)
+	return system.GetRAMInfo()
 }
 
 // GetRAMDetails returns detailed RAM information
 func (a *App) GetRAMDetails() string {
-	memInfo, err := mem.VirtualMemory()
-	if err != nil {
-		return "RAM: Error"
-	}
-	return fmt.Sprintf("Used: %s\nTotal: %s",
-		formatBytes(memInfo.Used),
-		formatBytes(memInfo.Total))
+	return system.GetRAMDetails()
 }
 
-// GetDiskInfo returns formatted disk usage
+// GetDiskInfo returns formatted disk usage percentage
 func (a *App) GetDiskInfo() string {
-	diskInfo, err := disk.Usage("/")
-	if err != nil {
-		return "Disk: Error"
-	}
-	return fmt.Sprintf("Disk: %.1f%%", math.Round(diskInfo.UsedPercent*10)/10)
+	return system.GetDiskInfo()
 }
 
 // GetDiskDetails returns detailed disk information
 func (a *App) GetDiskDetails() string {
-	diskInfo, err := disk.Usage("/")
-	if err != nil {
-		return "Disk: Error"
-	}
-	return fmt.Sprintf("Used: %s\nTotal: %s",
-		formatBytes(diskInfo.Used),
-		formatBytes(diskInfo.Total))
+	return system.GetDiskDetails()
+}
+
+// GetDockerStatus returns the Docker daemon status
+func (a *App) GetDockerStatus() docker.Status {
+	return docker.GetStatus()
+}
+
+// GetDockerMetrics returns Docker-related metrics
+func (a *App) GetDockerMetrics() docker.Metrics {
+	return docker.GetMetrics()
+}
+
+// GetNetworkStatus returns network status information
+func (a *App) GetNetworkStatus() network.Status {
+	return network.GetStatus()
+}
+
+// Shutdown is called when the app is closing
+func (a *App) Shutdown() {
+	runtime.Quit(a.ctx)
 }
