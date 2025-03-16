@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"DevEx/internal/devtools"
 	"DevEx/internal/docker"
 	"DevEx/internal/history"
 	"DevEx/internal/network"
@@ -18,10 +24,11 @@ import (
 
 // App struct
 type App struct {
-	ctx            context.Context
-	db             *history.DB
-	collector      *history.Collector
-	processManager *process.Manager
+	ctx             context.Context
+	db              *history.DB
+	collector       *history.Collector
+	processManager  *process.Manager
+	devToolsManager *devtools.DevToolsManager
 }
 
 // NewApp creates a new App application struct
@@ -42,9 +49,10 @@ func NewApp() *App {
 	processManager.SetMaxProcesses(300)
 
 	return &App{
-		db:             db,
-		collector:      collector,
-		processManager: processManager,
+		db:              db,
+		collector:       collector,
+		processManager:  processManager,
+		devToolsManager: devtools.NewDevToolsManager(),
 	}
 }
 
@@ -63,6 +71,11 @@ func (a *App) startup(ctx context.Context) {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
+
+	// Initialize DevTools manager
+	if err := a.devToolsManager.Initialize(); err != nil {
+		log.Printf("Error initializing DevTools manager: %v", err)
+	}
 }
 
 // shutdown is called when the app is closing
@@ -72,6 +85,13 @@ func (a *App) shutdown(ctx context.Context) {
 
 	// Stop the process manager
 	a.processManager.Stop()
+
+	// Close the Git repository manager
+	if gitManager := a.devToolsManager.GetGitRepoManager(); gitManager != nil {
+		if err := gitManager.Close(); err != nil {
+			log.Printf("Error closing Git repository manager: %v", err)
+		}
+	}
 
 	// Close the database connection
 	if err := a.db.Close(); err != nil {
@@ -202,4 +222,136 @@ func (a *App) FormatProcessBytes(bytes uint64) string {
 // Shutdown is called when the app is closing
 func (a *App) Shutdown() {
 	runtime.Quit(a.ctx)
+}
+
+// DevTools methods
+
+// GetAllServers returns all registered servers
+func (a *App) GetAllServers() []devtools.ServerInfo {
+	return a.devToolsManager.GetAllServers()
+}
+
+// StartServer starts a development server
+func (a *App) StartServer(serverID string) (devtools.ServerInfo, error) {
+	return a.devToolsManager.StartServer(serverID)
+}
+
+// StopServer stops a development server
+func (a *App) StopServer(serverID string) (devtools.ServerInfo, error) {
+	return a.devToolsManager.StopServer(serverID)
+}
+
+// AddServer adds a new server configuration
+func (a *App) AddServer(server devtools.ServerInfo) (devtools.ServerInfo, error) {
+	return a.devToolsManager.AddServer(server)
+}
+
+// RemoveServer removes a server configuration
+func (a *App) RemoveServer(serverID string) error {
+	return a.devToolsManager.RemoveServer(serverID)
+}
+
+// GetAllDatabases returns all registered databases
+func (a *App) GetAllDatabases() []devtools.DatabaseInfo {
+	return a.devToolsManager.GetAllDatabases()
+}
+
+// ConnectDatabase connects to a database
+func (a *App) ConnectDatabase(databaseID string) (devtools.DatabaseInfo, error) {
+	return a.devToolsManager.ConnectDatabase(databaseID)
+}
+
+// DisconnectDatabase disconnects from a database
+func (a *App) DisconnectDatabase(databaseID string) (devtools.DatabaseInfo, error) {
+	return a.devToolsManager.DisconnectDatabase(databaseID)
+}
+
+// AddDatabase adds a new database configuration
+func (a *App) AddDatabase(db devtools.DatabaseInfo) (devtools.DatabaseInfo, error) {
+	return a.devToolsManager.AddDatabase(db)
+}
+
+// RemoveDatabase removes a database configuration
+func (a *App) RemoveDatabase(databaseID string) error {
+	return a.devToolsManager.RemoveDatabase(databaseID)
+}
+
+// TestDatabaseConnection tests a database connection without actually connecting
+func (a *App) TestDatabaseConnection(db devtools.DatabaseInfo) (bool, string) {
+	return a.devToolsManager.TestDatabaseConnection(db)
+}
+
+// SendAPIRequest sends an API request and returns the response
+func (a *App) SendAPIRequest(req devtools.APIRequest) devtools.APIResponse {
+	return a.devToolsManager.SendAPIRequest(req)
+}
+
+// GetSavedAPIRequests returns a list of saved API requests
+func (a *App) GetSavedAPIRequests() []devtools.APIRequest {
+	return a.devToolsManager.GetSavedAPIRequests()
+}
+
+// GetAllGitRepos returns all registered Git repositories
+func (a *App) GetAllGitRepos() []devtools.GitRepoInfo {
+	return a.devToolsManager.GetAllGitRepos()
+}
+
+// RefreshGitRepo refreshes the status of a Git repository
+func (a *App) RefreshGitRepo(repoID string) (devtools.GitRepoInfo, error) {
+	return a.devToolsManager.RefreshGitRepo(repoID)
+}
+
+// AddGitRepo adds a new Git repository
+func (a *App) AddGitRepo(repo devtools.GitRepoInfo) (devtools.GitRepoInfo, error) {
+	return a.devToolsManager.AddGitRepo(repo)
+}
+
+// RemoveGitRepo removes a Git repository
+func (a *App) RemoveGitRepo(repoID string) error {
+	return a.devToolsManager.RemoveGitRepo(repoID)
+}
+
+// GetGitRepoChanges returns the changes in a Git repository
+func (a *App) GetGitRepoChanges(repoID string) ([]string, error) {
+	return a.devToolsManager.GetGitRepoChanges(repoID)
+}
+
+// OpenInVSCode opens a directory in Visual Studio Code
+func (a *App) OpenInVSCode(path string) error {
+	// Expand path if it contains ~
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("error getting home directory: %v", err)
+		}
+		path = filepath.Join(home, path[2:])
+	}
+
+	// Check if the path exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("directory not found: %s", path)
+	}
+
+	// Open the directory in VS Code
+	cmd := exec.Command("code", "-n", path)
+	return cmd.Start()
+}
+
+// OpenFolderPicker opens a native folder picker dialog and returns the selected path
+func (a *App) OpenFolderPicker() (string, error) {
+	// Use the Wails runtime to open a directory selection dialog
+	selectedDir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Repository Directory",
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("error opening folder picker: %v", err)
+	}
+
+	// If user canceled, return empty string without error
+	if selectedDir == "" {
+		return "", nil
+	}
+
+	return selectedDir, nil
 }

@@ -2,6 +2,12 @@
   import { GetCPUInfo, GetCPUDetails, GetRAMInfo, GetRAMDetails, GetDiskInfo, GetDiskDetails, GetDockerStatus, GetDockerMetrics, GetNetworkStatus, GetCPUHistory, GetRAMHistory, GetDiskHistory, GetAllProcesses, SearchProcessesByPort, KillProcess, FormatProcessBytes } from '../wailsjs/go/main/App';
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime';
   import { onMount } from 'svelte';
+  import { GetAllServers, StartServer, StopServer, GetAllDatabases, ConnectDatabase, DisconnectDatabase, SendAPIRequest, GetAllGitRepos, RefreshGitRepo, AddGitRepo, RemoveGitRepo, GetGitRepoChanges, OpenInVSCode, OpenFolderPicker } from '../wailsjs/go/main/App';
+  import * as models from '../wailsjs/go/models';
+
+  // Debug log to check if models is imported correctly
+  console.log("Models import:", models);
+  console.log("GitRepoInfo available:", models.devtools && models.devtools.GitRepoInfo);
 
   let cpuInfo = "Loading...";
   let cpuDetails = "Loading...";
@@ -36,6 +42,7 @@
     { id: 'dashboard', name: 'Dashboard', icon: '📊' },
     { id: 'history', name: 'History', icon: '📈' },
     { id: 'processes', name: 'Processes', icon: '⚙️' },
+    { id: 'devtools', name: 'Dev Tools', icon: '🛠️' },
     { id: 'logs', name: 'Logs', icon: '📝' },
     { id: 'settings', name: 'Settings', icon: '⚙️' }
   ];
@@ -58,6 +65,33 @@
   let isLoadingProcesses = false;
   let searchTimeout = null;
   let filterOption = "all"; // Changed from individual booleans to a single option
+
+  // Add state variables for DevTools
+  let servers = [];
+  let databases = [];
+  let gitRepos = [];
+  let apiRequest = {
+    url: 'https://jsonplaceholder.typicode.com/posts/1',
+    method: 'GET',
+    headers: { 'Accept': 'application/json' },
+    body: '',
+    timeout: 30
+  };
+  let apiResponse = null;
+  let isLoadingServers = false;
+  let isLoadingDatabases = false;
+  let isLoadingGitRepos = false;
+  let isSendingRequest = false;
+  let headersJson = '';
+  let showAddRepoModal = false;
+  let showRemoveRepoModal = false;
+  let repoToRemove = null;
+  let newRepo = {
+    name: '',
+    path: '',
+    description: '',
+    url: ''
+  };
 
   function getStatusClass(value) {
     if (value === "Loading...") return "pending";
@@ -330,9 +364,264 @@
     return date.toLocaleString();
   }
 
+  // Add function to load DevTools data
+  async function loadDevToolsData() {
+    if (selectedCategory === 'devtools') {
+      await Promise.all([
+        loadServers(),
+        loadDatabases(),
+        loadGitRepos()
+      ]);
+    }
+  }
+
+  // Add function to load servers
+  async function loadServers() {
+    isLoadingServers = true;
+    try {
+      servers = await GetAllServers();
+    } catch (error) {
+      console.error('Error loading servers:', error);
+    } finally {
+      isLoadingServers = false;
+    }
+  }
+
+  // Add function to start a server
+  async function handleStartServer(serverId) {
+    try {
+      const updatedServer = await StartServer(serverId);
+      servers = servers.map(server => 
+        server.id === serverId ? updatedServer : server
+      );
+    } catch (error) {
+      console.error('Error starting server:', error);
+    }
+  }
+
+  // Add function to stop a server
+  async function handleStopServer(serverId) {
+    try {
+      const updatedServer = await StopServer(serverId);
+      servers = servers.map(server => 
+        server.id === serverId ? updatedServer : server
+      );
+    } catch (error) {
+      console.error('Error stopping server:', error);
+    }
+  }
+
+  // Add function to load databases
+  async function loadDatabases() {
+    isLoadingDatabases = true;
+    try {
+      databases = await GetAllDatabases();
+    } catch (error) {
+      console.error('Error loading databases:', error);
+    } finally {
+      isLoadingDatabases = false;
+    }
+  }
+
+  // Add function to connect to a database
+  async function handleConnectDatabase(databaseId) {
+    try {
+      const updatedDatabase = await ConnectDatabase(databaseId);
+      databases = databases.map(db => 
+        db.id === databaseId ? updatedDatabase : db
+      );
+    } catch (error) {
+      console.error('Error connecting to database:', error);
+    }
+  }
+
+  // Add function to disconnect from a database
+  async function handleDisconnectDatabase(databaseId) {
+    try {
+      const updatedDatabase = await DisconnectDatabase(databaseId);
+      databases = databases.map(db => 
+        db.id === databaseId ? updatedDatabase : db
+      );
+    } catch (error) {
+      console.error('Error disconnecting from database:', error);
+    }
+  }
+
+  // Add function to send API request
+  async function handleSendAPIRequest() {
+    isSendingRequest = true;
+    try {
+      // Parse headers from JSON string
+      try {
+        apiRequest.headers = JSON.parse(headersJson);
+      } catch (error) {
+        console.error('Error parsing headers JSON:', error);
+      }
+      
+      apiResponse = await SendAPIRequest(apiRequest);
+    } catch (error) {
+      console.error('Error sending API request:', error);
+      apiResponse = {
+        statusCode: 0,
+        status: 'Error',
+        headers: {},
+        body: '',
+        duration: 0,
+        error: `Error sending request: ${error.message || error}`
+      };
+    } finally {
+      isSendingRequest = false;
+    }
+  }
+
+  // Add function to load Git repositories
+  async function loadGitRepos() {
+    isLoadingGitRepos = true;
+    try {
+      gitRepos = await GetAllGitRepos();
+    } catch (error) {
+      console.error('Error loading Git repositories:', error);
+    } finally {
+      isLoadingGitRepos = false;
+    }
+  }
+
+  // Add function to refresh a Git repository
+  async function handleRefreshRepo(repoId) {
+    try {
+      const updatedRepo = await RefreshGitRepo(repoId);
+      gitRepos = gitRepos.map(repo => 
+        repo.id === repoId ? updatedRepo : repo
+      );
+    } catch (error) {
+      console.error('Error refreshing Git repository:', error);
+    }
+  }
+
+  // Add function to add a new Git repository
+  async function handleAddRepo() {
+    if (!newRepo.name || !newRepo.path) {
+      alert("Repository name and path are required");
+      return;
+    }
+
+    try {
+      // Create a new repository using the GitRepoInfo model
+      const repoData = {
+        id: '',
+        name: newRepo.name,
+        path: newRepo.path,
+        branch: 'main',
+        status: 'unknown',
+        lastCommit: '',
+        lastCommitBy: '',
+        lastUpdated: new Date().toISOString(),
+        changes: 0,
+        description: newRepo.description,
+        url: newRepo.url || '' // URL is now optional
+      };
+      
+      // Use the createFrom method to ensure proper structure
+      const repoToAdd = models.devtools.GitRepoInfo.createFrom(repoData);
+
+      await AddGitRepo(repoToAdd);
+      
+      // Reset form fields
+      newRepo.name = '';
+      newRepo.path = '';
+      newRepo.description = '';
+      newRepo.url = '';
+      
+      // Close the modal
+      showAddRepoModal = false;
+      
+      // Refresh the repo list
+      await loadGitRepos();
+    } catch (error) {
+      console.error("Error adding repository:", error);
+      alert("Failed to add repository: " + error.message);
+    }
+  }
+
+  // Add function to remove a Git repository
+  async function handleRemoveRepo(repo) {
+    console.log("Attempting to remove repository:", repo);
+    // Show the custom confirmation modal instead of using confirm()
+    repoToRemove = repo;
+    showRemoveRepoModal = true;
+  }
+
+  // Function to confirm repository removal
+  async function confirmRemoveRepo() {
+    if (!repoToRemove) return;
+    
+    try {
+      console.log("Confirmed removal of repository with ID:", repoToRemove.id);
+      await RemoveGitRepo(repoToRemove.id);
+      console.log("Repository removed successfully, refreshing list");
+      
+      // Close the modal
+      showRemoveRepoModal = false;
+      repoToRemove = null;
+      
+      // Refresh the repo list
+      await loadGitRepos();
+    } catch (error) {
+      console.error('Error removing Git repository:', error);
+      alert(`Error removing repository: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  // Function to cancel repository removal
+  function cancelRemoveRepo() {
+    console.log("Repository removal cancelled by user");
+    showRemoveRepoModal = false;
+    repoToRemove = null;
+  }
+
+  // Reset the add repository form
+  function resetAddRepoForm() {
+    newRepo = {
+      name: '',
+      path: '',
+      description: '',
+      url: ''
+    };
+  }
+
+  // Function to open repository in VS Code
+  async function handleOpenInVSCode(path) {
+    console.log("Opening repository in VS Code:", path);
+    try {
+      await OpenInVSCode(path);
+      console.log("Repository opened in VS Code successfully");
+    } catch (error) {
+      console.error("Error opening repository in VS Code:", error);
+      alert(`Error opening repository: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  // Function to open folder picker
+  async function handleBrowseForFolder() {
+    console.log("Opening folder picker");
+    try {
+      const selectedPath = await OpenFolderPicker();
+      if (selectedPath) {
+        console.log("Selected path:", selectedPath);
+        newRepo.path = selectedPath;
+      }
+    } catch (error) {
+      console.error("Error opening folder picker:", error);
+      alert(`Error selecting folder: ${error.message || 'Unknown error'}`);
+    }
+  }
+
   onMount(() => {
     updateMetrics();
     updateHistoryData();
+    
+    // Load repositories on startup
+    loadGitRepos();
     
     // Delay process loading to avoid initial UI freeze
     setTimeout(updateProcesses, 1000);
@@ -340,6 +629,9 @@
     const interval = setInterval(updateMetrics, 2000);
     const historyInterval = setInterval(updateHistoryData, 30000); // Update history every 30 seconds
     const processInterval = setInterval(updateProcesses, 30000); // Update processes every 30 seconds instead of 10
+    
+    // Initialize headersJson
+    headersJson = JSON.stringify(apiRequest.headers, null, 2);
     
     return () => {
       clearInterval(interval);
@@ -793,6 +1085,205 @@
           </div>
         {/if}
       </section>
+    {:else if selectedCategory === 'devtools'}
+      <section class="content-section">
+        <h1>Developer Tools</h1>
+        
+        <!-- Development Servers Section -->
+        <div class="devtools-section">
+          <h2>Development Servers</h2>
+          <div class="devtools-grid">
+            {#if isLoadingServers}
+              <div class="loading">Loading servers...</div>
+            {:else if servers.length === 0}
+              <div class="empty-state">No development servers found.</div>
+            {:else}
+              {#each servers as server}
+                <div class="devtools-card">
+                  <div class="devtools-card-header">
+                    <h3>{server.name}</h3>
+                    <span class="badge {server.status === 'running' ? 'success' : 'pending'}">{server.status}</span>
+                  </div>
+                  <div class="devtools-card-content">
+                    <p>{server.description || 'No description'}</p>
+                    <div class="server-details">
+                      <div><strong>Type:</strong> {server.type}</div>
+                      <div><strong>Port:</strong> {server.port}</div>
+                      <div><strong>Path:</strong> {server.path}</div>
+                      {#if server.status === 'running'}
+                        <div><strong>PID:</strong> {server.pid}</div>
+                        <div><strong>Started:</strong> {new Date(server.startTime).toLocaleString()}</div>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="devtools-card-actions">
+                    {#if server.status === 'running'}
+                      <button class="btn btn-danger" on:click={() => handleStopServer(server.id)}>Stop Server</button>
+                      <a href={server.url} target="_blank" class="btn btn-secondary">Open URL</a>
+                    {:else}
+                      <button class="btn btn-primary" on:click={() => handleStartServer(server.id)}>Start Server</button>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+        
+        <!-- Database Connections Section -->
+        <div class="devtools-section">
+          <h2>Database Connections</h2>
+          <div class="devtools-grid">
+            {#if isLoadingDatabases}
+              <div class="loading">Loading databases...</div>
+            {:else if databases.length === 0}
+              <div class="empty-state">No database connections found.</div>
+            {:else}
+              {#each databases as db}
+                <div class="devtools-card">
+                  <div class="devtools-card-header">
+                    <h3>{db.name}</h3>
+                    <span class="badge {db.status === 'connected' ? 'success' : 'pending'}">{db.status}</span>
+                  </div>
+                  <div class="devtools-card-content">
+                    <p>{db.description || 'No description'}</p>
+                    <div class="db-details">
+                      <div><strong>Type:</strong> {db.type}</div>
+                      <div><strong>Host:</strong> {db.host}</div>
+                      <div><strong>Port:</strong> {db.port}</div>
+                      <div><strong>Database:</strong> {db.database}</div>
+                      <div><strong>Username:</strong> {db.username}</div>
+                      {#if db.status === 'connected'}
+                        <div><strong>Connected at:</strong> {new Date(db.connectedAt).toLocaleString()}</div>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="devtools-card-actions">
+                    {#if db.status === 'connected'}
+                      <button class="btn btn-danger" on:click={() => handleDisconnectDatabase(db.id)}>Disconnect</button>
+                    {:else}
+                      <button class="btn btn-primary" on:click={() => handleConnectDatabase(db.id)}>Connect</button>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+        
+        <!-- API Endpoint Tester Section -->
+        <div class="devtools-section">
+          <h2>API Endpoint Tester</h2>
+          <div class="api-tester">
+            <div class="request-section">
+              <div class="form-group">
+                <label for="api-url">URL</label>
+                <input type="text" id="api-url" bind:value={apiRequest.url} placeholder="https://api.example.com/endpoint" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="api-method">Method</label>
+                  <select id="api-method" bind:value={apiRequest.method}>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="api-timeout">Timeout (seconds)</label>
+                  <input type="number" id="api-timeout" bind:value={apiRequest.timeout} min="1" max="60" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="api-headers">Headers (JSON)</label>
+                <textarea id="api-headers" bind:value={headersJson} rows="3"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="api-body">Request Body</label>
+                <textarea id="api-body" bind:value={apiRequest.body} rows="5" placeholder="Request body (JSON, XML, etc.)"></textarea>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" on:click={handleSendAPIRequest} disabled={isSendingRequest}>
+                  {isSendingRequest ? 'Sending...' : 'Send Request'}
+                </button>
+              </div>
+            </div>
+            <div class="response-section">
+              <h3>Response</h3>
+              {#if apiResponse}
+                <div class="response-header">
+                  <span class="status-code {apiResponse.statusCode >= 200 && apiResponse.statusCode < 300 ? 'success' : apiResponse.statusCode >= 400 ? 'error' : 'warning'}">
+                    {apiResponse.statusCode} {apiResponse.status}
+                  </span>
+                  <span class="duration">{apiResponse.duration} ms</span>
+                </div>
+                {#if apiResponse.error}
+                  <div class="response-error">{apiResponse.error}</div>
+                {:else}
+                  <div class="response-headers">
+                    <h4>Headers</h4>
+                    <pre style="text-align: left;">{JSON.stringify(apiResponse.headers, null, 2)}</pre>
+                  </div>
+                  <div class="response-body">
+                    <pre style="text-align: left; white-space: pre-wrap; font-family: monospace;">{`${apiResponse.body}`}</pre>
+                  </div>
+                {/if}
+              {:else}
+                <div class="empty-response">Send a request to see the response</div>
+              {/if}
+            </div>
+          </div>
+        </div>
+        
+        <!-- Git Repositories Section -->
+        <div class="devtools-section">
+          <div class="section-header">
+            <h2>Git Repositories</h2>
+            <div>
+              <button class="btn btn-primary" on:click={() => showAddRepoModal = true}>Add Repository</button>
+            </div>
+          </div>
+          <div class="devtools-grid">
+            {#if isLoadingGitRepos}
+              <div class="loading">Loading repositories...</div>
+            {:else if gitRepos.length === 0}
+              <div class="empty-state">
+                <p>No Git repositories found.</p>
+                <button class="btn btn-primary" on:click={() => showAddRepoModal = true}>Add Repository</button>
+              </div>
+            {:else}
+              {#each gitRepos as repo}
+                <div class="devtools-card">
+                  <div class="devtools-card-header">
+                    <h3>{repo.name}</h3>
+                    <span class="badge {repo.status === 'clean' ? 'success' : repo.status === 'modified' ? 'warning' : 'pending'}">{repo.status}</span>
+                  </div>
+                  <div class="devtools-card-content">
+                    <p>{repo.description || 'No description'}</p>
+                    <div class="repo-details">
+                      <div><strong>Branch:</strong> {repo.branch}</div>
+                      <div><strong>Path:</strong> {repo.path}</div>
+                      <div><strong>Last Commit:</strong> {repo.lastCommit}</div>
+                      <div><strong>By:</strong> {repo.lastCommitBy}</div>
+                      <div><strong>Last Updated:</strong> {new Date(repo.lastUpdated).toLocaleString()}</div>
+                      {#if repo.changes > 0}
+                        <div><strong>Changes:</strong> <span class="changes-count">{repo.changes}</span></div>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="devtools-card-actions">
+                    <button class="btn btn-primary" on:click={() => handleRefreshRepo(repo.id)}>Refresh</button>
+                    <button class="btn btn-secondary" on:click={() => handleOpenInVSCode(repo.path)}>Open</button>
+                    <button class="btn btn-danger" on:click={() => handleRemoveRepo(repo)}>Remove</button>
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      </section>
     {:else if selectedCategory === 'logs'}
       <div class="dashboard-grid">
         <div class="card">
@@ -849,6 +1340,63 @@
     {/if}
   </main>
 </div>
+
+<!-- Add Repository Modal -->
+{#if showAddRepoModal}
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add Git Repository</h3>
+        <button class="close-btn" on:click={() => showAddRepoModal = false}>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="repo-name">Repository Name*</label>
+          <input type="text" id="repo-name" bind:value={newRepo.name} placeholder="My Project" required />
+        </div>
+        <div class="form-group">
+          <label for="repo-path">Repository Path*</label>
+          <div class="input-with-button">
+            <input type="text" id="repo-path" bind:value={newRepo.path} placeholder="Path to repository" required />
+            <button class="btn btn-secondary" on:click={handleBrowseForFolder}>Browse...</button>
+          </div>
+          <small>Path to the Git repository on your local machine.</small>
+        </div>
+        <div class="form-group">
+          <label for="repo-description">Description</label>
+          <input type="text" id="repo-description" bind:value={newRepo.description} placeholder="Description of the repository" />
+        </div>
+        <div class="form-group">
+          <label for="repo-url">Repository URL <small>(Optional)</small></label>
+          <input type="text" id="repo-url" bind:value={newRepo.url} placeholder="https://github.com/user/repo" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" on:click={() => showAddRepoModal = false}>Cancel</button>
+        <button class="btn btn-primary" on:click={handleAddRepo}>Add Repository</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showRemoveRepoModal && repoToRemove}
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Confirm Repository Removal</h3>
+        <button class="close-btn" on:click={cancelRemoveRepo}>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="confirmation-text">Are you sure you want to remove the repository "{repoToRemove.name}"?</p>
+        <p class="confirmation-text">This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" on:click={cancelRemoveRepo}>Cancel</button>
+        <button class="btn btn-danger" on:click={confirmRemoveRepo}>Remove Repository</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .app-container {
@@ -1089,7 +1637,6 @@
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: background-color 0.2s;
   }
 
   .refresh-button:hover {
@@ -1324,13 +1871,6 @@
     cursor: pointer;
   }
 
-  .no-data {
-    text-align: center;
-    padding: 2rem;
-    color: #666;
-    font-style: italic;
-  }
-
   .loading-spinner {
     display: inline-block;
     width: 30px;
@@ -1401,5 +1941,326 @@
 
   .clickable-header:hover .filter-icon {
     opacity: 1;
+  }
+
+  /* DevTools Styles */
+  .devtools-section {
+    margin-bottom: 2rem;
+  }
+  
+  .devtools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+  
+  .devtools-card {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .devtools-card-header {
+    padding: 1rem;
+    background-color: #f5f5f5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .devtools-card-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  
+  .devtools-card-content {
+    padding: 1rem;
+    flex-grow: 1;
+  }
+  
+  .devtools-card-actions {
+    padding: 1rem;
+    background-color: #f5f5f5;
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .server-details, .db-details, .repo-details {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .server-details > div, .db-details > div, .repo-details > div {
+    margin-bottom: 0.5rem;
+  }
+  
+  .badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: bold;
+  }
+  
+  .badge.success {
+    background-color: #4caf50;
+    color: white;
+  }
+  
+  .badge.warning {
+    background-color: #ff9800;
+    color: white;
+  }
+  
+  .badge.error {
+    background-color: #f44336;
+    color: white;
+  }
+  
+  .badge.pending {
+    background-color: #9e9e9e;
+    color: white;
+  }
+  
+  .loading, .empty-state {
+    grid-column: 1 / -1;
+    padding: 2rem;
+    text-align: center;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+  }
+  
+  .api-tester {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .request-section, .response-section {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-row {
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .form-row .form-group {
+    flex: 1;
+  }
+  
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+  }
+  
+  input, select, textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: inherit;
+  }
+  
+  .form-actions {
+    margin-top: 1rem;
+  }
+  
+  .response-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+  }
+  
+  .status-code {
+    font-weight: bold;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+  }
+  
+  .duration {
+    font-size: 0.9rem;
+    color: #666;
+  }
+  
+  .response-error {
+    padding: 1rem;
+    background-color: #ffebee;
+    color: #f44336;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  
+  .response-headers, .response-body {
+    margin-top: 1rem;
+  }
+  
+  .response-headers h4, .response-body h4 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+  }
+  
+  .empty-response {
+    padding: 2rem;
+    text-align: center;
+    color: #666;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+  }
+  
+  .changes-count {
+    background-color: #ff9800;
+    color: white;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+  }
+  
+  .btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+  }
+  
+  .btn-primary {
+    background-color: #2196f3;
+    color: white;
+  }
+  
+  .btn-primary:hover {
+    background-color: #1976d2;
+  }
+  
+  .btn-secondary {
+    background-color: #9e9e9e;
+    color: white;
+  }
+  
+  .btn-secondary:hover {
+    background-color: #757575;
+  }
+  
+  .btn-danger {
+    background-color: #f44336;
+    color: white;
+  }
+  
+  .btn-danger:hover {
+    background-color: #d32f2f;
+  }
+  
+  .btn:disabled {
+    background-color: #ddd;
+    color: #888;
+    cursor: not-allowed;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  
+  .modal {
+    background-color: #fff;
+    border-radius: 8px;
+    width: 500px;
+    max-width: 90%;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .modal-header h3 {
+    margin: 0;
+    color: #333;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  
+  .confirmation-text {
+    color: #333;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .modal-footer {
+    padding: 1rem;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+  }
+  
+  .close-btn:hover {
+    color: #000;
+  }
+  
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+  
+  .empty-state p {
+    margin-bottom: 1rem;
+    color: #666;
+  }
+  
+  small {
+    display: block;
+    margin-top: 0.25rem;
+    color: #666;
+    font-size: 0.8rem;
+  }
+
+  .input-with-button {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .input-with-button input {
+    flex: 1;
   }
 </style>
