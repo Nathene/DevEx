@@ -379,6 +379,26 @@ func (gm *GitRepoManager) RefreshRepo(repoID string) (GitRepoInfo, error) {
 	return *repo, nil
 }
 
+// RefreshAllRepos refreshes all repositories and returns the updated list
+func (gm *GitRepoManager) RefreshAllRepos() []GitRepoInfo {
+	gm.mutex.Lock()
+	repoIDs := make([]string, 0, len(gm.repos))
+	for id := range gm.repos {
+		repoIDs = append(repoIDs, id)
+	}
+	gm.mutex.Unlock()
+
+	// Refresh each repository
+	for _, id := range repoIDs {
+		// We don't need to handle errors here, as we want to continue refreshing other repos
+		// even if one fails
+		gm.RefreshRepo(id)
+	}
+
+	// Return the updated list
+	return gm.GetAllRepos()
+}
+
 // AddRepo adds a new repository
 func (gm *GitRepoManager) AddRepo(repo GitRepoInfo) (GitRepoInfo, error) {
 	gm.mutex.Lock()

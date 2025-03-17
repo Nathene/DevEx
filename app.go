@@ -352,6 +352,11 @@ func (a *App) RefreshGitRepo(repoID string) (devtools.GitRepoInfo, error) {
 	return a.devToolsManager.RefreshGitRepo(repoID)
 }
 
+// RefreshAllGitRepos refreshes all Git repositories
+func (a *App) RefreshAllGitRepos() []devtools.GitRepoInfo {
+	return a.devToolsManager.RefreshAllGitRepos()
+}
+
 // AddGitRepo adds a new Git repository
 func (a *App) AddGitRepo(repo devtools.GitRepoInfo) (devtools.GitRepoInfo, error) {
 	return a.devToolsManager.AddGitRepo(repo)

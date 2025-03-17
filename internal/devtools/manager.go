@@ -123,6 +123,11 @@ func (dtm *DevToolsManager) RefreshGitRepo(repoID string) (GitRepoInfo, error) {
 	return dtm.gitRepoManager.RefreshRepo(repoID)
 }
 
+// RefreshAllGitRepos refreshes all Git repositories
+func (dtm *DevToolsManager) RefreshAllGitRepos() []GitRepoInfo {
+	return dtm.gitRepoManager.RefreshAllRepos()
+}
+
 // AddGitRepo adds a new Git repository
 func (dtm *DevToolsManager) AddGitRepo(repo GitRepoInfo) (GitRepoInfo, error) {
 	return dtm.gitRepoManager.AddRepo(repo)

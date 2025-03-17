@@ -70,6 +70,8 @@ export function OpenFolderPicker():Promise<string>;
 
 export function OpenInVSCode(arg1:string):Promise<void>;
 
+export function RefreshAllGitRepos():Promise<Array<devtools.GitRepoInfo>>;
+
 export function RefreshGitRepo(arg1:string):Promise<devtools.GitRepoInfo>;
 
 export function RemoveDatabase(arg1:string):Promise<void>;

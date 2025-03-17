@@ -2,7 +2,7 @@
   import { GetCPUInfo, GetCPUDetails, GetRAMInfo, GetRAMDetails, GetDiskInfo, GetDiskDetails, GetDockerStatus, GetDockerMetrics, GetNetworkStatus, GetCPUHistory, GetRAMHistory, GetDiskHistory, GetAllProcesses, SearchProcessesByPort, KillProcess, FormatProcessBytes, GetTopMemoryProcesses, GetTopCPUProcesses, GetTopDiskProcesses } from '../wailsjs/go/main/App';
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime';
   import { onMount } from 'svelte';
-  import { GetAllServers, StartServer, StopServer, GetAllDatabases, ConnectDatabase, DisconnectDatabase, SendAPIRequest, GetAllGitRepos, RefreshGitRepo, AddGitRepo, RemoveGitRepo, GetGitRepoChanges, OpenInVSCode, OpenFolderPicker } from '../wailsjs/go/main/App';
+  import { GetAllServers, StartServer, StopServer, GetAllDatabases, ConnectDatabase, DisconnectDatabase, SendAPIRequest, GetAllGitRepos, RefreshGitRepo, RefreshAllGitRepos, AddGitRepo, RemoveGitRepo, GetGitRepoChanges, OpenInVSCode, OpenFolderPicker } from '../wailsjs/go/main/App';
   import * as models from '../wailsjs/go/models';
 
   // Debug log to check if models is imported correctly
@@ -489,6 +489,42 @@
       console.error('Error loading Git repositories:', error);
     } finally {
       isLoadingGitRepos = false;
+    }
+  }
+
+  // Add function to refresh all Git repositories
+  async function handleRefreshAllRepos() {
+    // Save current scroll position
+    const scrollPosition = window.scrollY;
+    
+    // Add a refreshing class to each repository card instead of setting isLoadingGitRepos
+    const repoCards = document.querySelectorAll('.devtools-card');
+    repoCards.forEach(card => {
+      card.classList.add('refreshing');
+    });
+    
+    try {
+      // Get updated repositories without changing the loading state
+      const updatedRepos = await RefreshAllGitRepos();
+      
+      // Update repositories without full page reload effect
+      gitRepos = updatedRepos;
+    } catch (error) {
+      console.error('Error refreshing all Git repositories:', error);
+    } finally {
+      // Remove refreshing class
+      setTimeout(() => {
+        const updatedRepoCards = document.querySelectorAll('.devtools-card');
+        updatedRepoCards.forEach(card => {
+          card.classList.remove('refreshing');
+        });
+        
+        // Restore scroll position
+        window.scrollTo({
+          top: scrollPosition,
+          behavior: 'auto'
+        });
+      }, 100);
     }
   }
 
@@ -1321,6 +1357,7 @@
           <div class="section-header">
             <h2>Git Repositories</h2>
             <div>
+              <button class="btn btn-secondary" on:click={handleRefreshAllRepos}>Refresh All</button>
               <button class="btn btn-primary" on:click={() => showAddRepoModal = true}>Add Repository</button>
             </div>
           </div>
@@ -2533,5 +2570,46 @@
 
   .process-note.warning {
     color: #f44336;
+  }
+  
+  /* Add styles for refreshing state */
+  .devtools-card.refreshing {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+  
+  .devtools-card.refreshing::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+  }
+  
+  .devtools-card.refreshing::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px;
+    height: 30px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 2;
+  }
+  
+  @keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
   }
 </style>

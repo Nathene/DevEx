@@ -130,6 +130,10 @@ export function OpenInVSCode(arg1) {
   return window['go']['main']['App']['OpenInVSCode'](arg1);
 }
 
+export function RefreshAllGitRepos() {
+  return window['go']['main']['App']['RefreshAllGitRepos']();
+}
+
 export function RefreshGitRepo(arg1) {
   return window['go']['main']['App']['RefreshGitRepo'](arg1);
 }
