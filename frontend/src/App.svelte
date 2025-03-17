@@ -1,5 +1,5 @@
 <script>
-  import { GetCPUInfo, GetCPUDetails, GetRAMInfo, GetRAMDetails, GetDiskInfo, GetDiskDetails, GetDockerStatus, GetDockerMetrics, GetNetworkStatus, GetCPUHistory, GetRAMHistory, GetDiskHistory, GetAllProcesses, SearchProcessesByPort, KillProcess, FormatProcessBytes } from '../wailsjs/go/main/App';
+  import { GetCPUInfo, GetCPUDetails, GetRAMInfo, GetRAMDetails, GetDiskInfo, GetDiskDetails, GetDockerStatus, GetDockerMetrics, GetNetworkStatus, GetCPUHistory, GetRAMHistory, GetDiskHistory, GetAllProcesses, SearchProcessesByPort, KillProcess, FormatProcessBytes, GetTopMemoryProcesses, GetTopCPUProcesses, GetTopDiskProcesses } from '../wailsjs/go/main/App';
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime';
   import { onMount } from 'svelte';
   import { GetAllServers, StartServer, StopServer, GetAllDatabases, ConnectDatabase, DisconnectDatabase, SendAPIRequest, GetAllGitRepos, RefreshGitRepo, AddGitRepo, RemoveGitRepo, GetGitRepoChanges, OpenInVSCode, OpenFolderPicker } from '../wailsjs/go/main/App';
@@ -92,6 +92,12 @@
     description: '',
     url: ''
   };
+
+  // Add state for processes modals
+  let showProcessesModal = false;
+  let topProcesses = [];
+  let currentMetricType = ''; // 'memory', 'cpu', or 'disk'
+  let modalTitle = '';
 
   function getStatusClass(value) {
     if (value === "Loading...") return "pending";
@@ -616,6 +622,76 @@
     }
   }
 
+  // Add function to fetch top memory processes
+  async function fetchTopMemoryProcesses() {
+    try {
+      isLoadingProcesses = true;
+      currentMetricType = 'memory';
+      modalTitle = 'Top Memory Consuming Processes';
+      topProcesses = await GetTopMemoryProcesses();
+      showProcessesModal = true;
+    } catch (error) {
+      console.error("Error fetching top memory processes:", error);
+    } finally {
+      isLoadingProcesses = false;
+    }
+  }
+
+  // Add function to fetch top CPU processes
+  async function fetchTopCPUProcesses() {
+    try {
+      isLoadingProcesses = true;
+      currentMetricType = 'cpu';
+      modalTitle = 'Top CPU Consuming Processes';
+      topProcesses = await GetTopCPUProcesses();
+      showProcessesModal = true;
+    } catch (error) {
+      console.error("Error fetching top CPU processes:", error);
+    } finally {
+      isLoadingProcesses = false;
+    }
+  }
+
+  // Add function to fetch top disk processes
+  async function fetchTopDiskProcesses() {
+    try {
+      isLoadingProcesses = true;
+      currentMetricType = 'disk';
+      modalTitle = 'Top Disk Consuming Processes';
+      topProcesses = await GetTopDiskProcesses();
+      showProcessesModal = true;
+    } catch (error) {
+      console.error("Error fetching top disk processes:", error);
+    } finally {
+      isLoadingProcesses = false;
+    }
+  }
+
+  // Function to get the percentage of a resource used by a process
+  function getResourcePercentage(process, type) {
+    if (type === 'cpu') {
+      return process.process.cpuPercent.toFixed(1) + '%';
+    } else if (type === 'memory') {
+      if (ramDetails.includes("Total:") && ramDetails.split("\n").length > 1 && 
+          ramDetails.split("\n")[1].includes("Total:") && 
+          ramDetails.split("\n")[1].split("Total:")[1].trim().split(" ").length > 1) {
+        const totalRAM = parseFloat(ramDetails.split("\n")[1].split("Total:")[1].trim().split(" ")[0]) * 1024 * 1024 * 1024;
+        return ((process.process.memoryUsage / totalRAM) * 100).toFixed(1) + '%';
+      }
+      return 'N/A';
+    } else if (type === 'disk') {
+      // For disk, we're using memory as a proxy, so show memory percentage
+      if (ramDetails.includes("Total:") && ramDetails.split("\n").length > 1 && 
+          ramDetails.split("\n")[1].includes("Total:") && 
+          ramDetails.split("\n")[1].split("Total:")[1].trim().split(" ").length > 1) {
+        const totalRAM = parseFloat(ramDetails.split("\n")[1].split("Total:")[1].trim().split(" ")[0]) * 1024 * 1024 * 1024;
+        return ((process.process.memoryUsage / totalRAM) * 100).toFixed(1) + '%';
+      }
+      return 'N/A';
+    }
+    return 'N/A';
+  }
+
   onMount(() => {
     updateMetrics();
     updateHistoryData();
@@ -667,7 +743,7 @@
       <section class="dashboard-section">
         <h2 class="section-title">System Health</h2>
         <div class="dashboard-grid">
-          <div class="card status-{getStatusClass(cpuInfo)}">
+          <div class="card status-{getStatusClass(cpuInfo)}" on:click={fetchTopCPUProcesses} style="cursor: pointer;">
             <h3>CPU Usage</h3>
             <div class="metric status-indicator">
               <span class="status-dot {getStatusClass(cpuInfo)}"></span>
@@ -676,9 +752,10 @@
             <div class="details">
               <span class="status-text">{getStatusText(cpuInfo)}</span>
               {cpuDetails}
+              <div class="click-hint">(Click to see top CPU processes)</div>
             </div>
           </div>
-          <div class="card status-{getStatusClass(ramInfo)}">
+          <div class="card status-{getStatusClass(ramInfo)}" on:click={fetchTopMemoryProcesses} style="cursor: pointer;">
             <h3>Memory Usage</h3>
             <div class="metric status-indicator">
               <span class="status-dot {getStatusClass(ramInfo)}"></span>
@@ -687,9 +764,10 @@
             <div class="details">
               <span class="status-text">{getStatusText(ramInfo)}</span>
               {ramDetails}
+              <div class="click-hint">(Click to see top memory processes)</div>
             </div>
           </div>
-          <div class="card status-{getStatusClass(diskInfo)}">
+          <div class="card status-{getStatusClass(diskInfo)}" on:click={fetchTopDiskProcesses} style="cursor: pointer;">
             <h3>Disk Usage</h3>
             <div class="metric status-indicator">
               <span class="status-dot {getStatusClass(diskInfo)}"></span>
@@ -698,6 +776,7 @@
             <div class="details">
               <span class="status-text">{getStatusText(diskInfo)}</span>
               {diskDetails}
+              <div class="click-hint">(Click to see top disk processes)</div>
             </div>
           </div>
         </div>
@@ -1398,6 +1477,76 @@
   </div>
 {/if}
 
+<!-- Processes Modal -->
+{#if showProcessesModal}
+  <div class="modal-overlay">
+    <div class="modal-content processes-modal">
+      <div class="modal-header">
+        <h3>{modalTitle}</h3>
+        <button class="close-button" on:click={() => showProcessesModal = false}>×</button>
+      </div>
+      
+      {#if isLoadingProcesses}
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Loading processes...</p>
+        </div>
+      {:else if topProcesses.length === 0}
+        <p>No process information available</p>
+      {:else}
+        <div class="table-container">
+          <table class="process-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>{currentMetricType === 'memory' ? 'Memory' : currentMetricType === 'cpu' ? 'CPU' : 'Disk'}</th>
+                <th>{currentMetricType === 'memory' ? 'Memory %' : currentMetricType === 'cpu' ? 'CPU %' : 'Disk %'}</th>
+                <th>PID</th>
+                {#if currentMetricType !== 'cpu'}
+                  <th>CPU %</th>
+                {/if}
+                {#if currentMetricType !== 'memory'}
+                  <th>Memory</th>
+                {/if}
+                <th>User</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each topProcesses as process}
+                <tr>
+                  <td class="process-name" title={process.process.commandLine}>
+                    {process.process.name}
+                  </td>
+                  <td>
+                    {currentMetricType === 'memory' || currentMetricType === 'disk' 
+                      ? formatMemoryUsage(process.process.memoryUsage) 
+                      : process.process.cpuPercent.toFixed(1) + '%'}
+                  </td>
+                  <td>{getResourcePercentage(process, currentMetricType)}</td>
+                  <td>{process.process.pid}</td>
+                  {#if currentMetricType !== 'cpu'}
+                    <td>{process.process.cpuPercent.toFixed(1)}%</td>
+                  {/if}
+                  {#if currentMetricType !== 'memory'}
+                    <td>{formatMemoryUsage(process.process.memoryUsage)}</td>
+                  {/if}
+                  <td>{process.process.username}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <p class="process-note">Click on a process name to see its full command line</p>
+          {#if currentMetricType === 'disk'}
+            <p class="process-note warning">Note: Disk usage is approximated by memory consumption as actual disk I/O monitoring requires additional tools</p>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
+
 <style>
   .app-container {
     display: flex;
@@ -1746,6 +1895,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
+    color: #333; /* Add explicit text color */
   }
 
   .process-table th,
@@ -2262,5 +2412,126 @@
 
   .input-with-button input {
     flex: 1;
+  }
+
+  .click-hint {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 5px;
+    font-style: italic;
+  }
+
+  .memory-processes-modal {
+    width: 80%;
+    max-width: 900px;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+  }
+
+  .close-button:hover {
+    color: #f44336;
+  }
+
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+  }
+
+  .modal-footer {
+    margin-top: 15px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+    text-align: center;
+  }
+
+  .memory-note {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+  }
+
+  .processes-modal {
+    width: 80%;
+    max-width: 900px;
+    color: #333; /* Add explicit text color */
+    max-height: 80vh; /* Limit height to 80% of viewport height */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .table-container {
+    overflow-y: auto; /* Enable vertical scrolling */
+    max-height: 60vh; /* Limit height to 60% of viewport height */
+    margin-bottom: 10px;
+  }
+
+  .processes-modal table {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+  }
+
+  .close-button:hover {
+    color: #f44336;
+  }
+
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+  }
+
+  .modal-footer {
+    margin-top: 15px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+    text-align: center;
+  }
+
+  .process-note {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+    margin: 5px 0;
+  }
+
+  .process-note.warning {
+    color: #f44336;
   }
 </style>

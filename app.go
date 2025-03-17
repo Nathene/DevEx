@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -202,6 +203,56 @@ func (a *App) GetNetworkHistory(minutes int) []history.NetworkMetrics {
 // GetAllProcesses returns all running processes with port information
 func (a *App) GetAllProcesses() []process.ProcessWithPorts {
 	return a.processManager.GetProcesses()
+}
+
+// GetTopMemoryProcesses returns the top processes by memory usage
+func (a *App) GetTopMemoryProcesses() []process.ProcessWithPorts {
+	processes := a.processManager.GetProcesses()
+
+	// Sort processes by memory usage (highest first)
+	sort.Slice(processes, func(i, j int) bool {
+		return processes[i].Process.MemoryUsage > processes[j].Process.MemoryUsage
+	})
+
+	// Return top 30 or all if less than 30
+	if len(processes) > 30 {
+		return processes[:30]
+	}
+	return processes
+}
+
+// GetTopCPUProcesses returns the top processes by CPU usage
+func (a *App) GetTopCPUProcesses() []process.ProcessWithPorts {
+	processes := a.processManager.GetProcesses()
+
+	// Sort processes by CPU usage (highest first)
+	sort.Slice(processes, func(i, j int) bool {
+		return processes[i].Process.CPUPercent > processes[j].Process.CPUPercent
+	})
+
+	// Return top 30 or all if less than 30
+	if len(processes) > 30 {
+		return processes[:30]
+	}
+	return processes
+}
+
+// GetTopDiskProcesses returns the top processes by disk I/O (approximated by process age)
+// Note: Getting actual disk I/O per process requires additional monitoring
+func (a *App) GetTopDiskProcesses() []process.ProcessWithPorts {
+	processes := a.processManager.GetProcesses()
+
+	// Sort processes by memory usage as a proxy for potential disk usage
+	// In a real implementation, you would track actual disk I/O per process
+	sort.Slice(processes, func(i, j int) bool {
+		return processes[i].Process.MemoryUsage > processes[j].Process.MemoryUsage
+	})
+
+	// Return top 30 or all if less than 30
+	if len(processes) > 30 {
+		return processes[:30]
+	}
+	return processes
 }
 
 // SearchProcessesByPort finds processes using a specific port

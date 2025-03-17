@@ -106,6 +106,18 @@ export function GetSavedAPIRequests() {
   return window['go']['main']['App']['GetSavedAPIRequests']();
 }
 
+export function GetTopCPUProcesses() {
+  return window['go']['main']['App']['GetTopCPUProcesses']();
+}
+
+export function GetTopDiskProcesses() {
+  return window['go']['main']['App']['GetTopDiskProcesses']();
+}
+
+export function GetTopMemoryProcesses() {
+  return window['go']['main']['App']['GetTopMemoryProcesses']();
+}
+
 export function KillProcess(arg1) {
   return window['go']['main']['App']['KillProcess'](arg1);
 }

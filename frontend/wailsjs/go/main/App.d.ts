@@ -58,6 +58,12 @@ export function GetRAMInfo():Promise<string>;
 
 export function GetSavedAPIRequests():Promise<Array<devtools.APIRequest>>;
 
+export function GetTopCPUProcesses():Promise<Array<process.ProcessWithPorts>>;
+
+export function GetTopDiskProcesses():Promise<Array<process.ProcessWithPorts>>;
+
+export function GetTopMemoryProcesses():Promise<Array<process.ProcessWithPorts>>;
+
 export function KillProcess(arg1:number):Promise<void>;
 
 export function OpenFolderPicker():Promise<string>;
