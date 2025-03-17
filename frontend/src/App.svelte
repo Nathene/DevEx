@@ -587,38 +587,96 @@
 
   // Add function to remove a Git repository
   async function handleRemoveRepo(repo) {
-    console.log("Attempting to remove repository:", repo);
-    // Show the custom confirmation modal instead of using confirm()
-    repoToRemove = repo;
+    console.log("=== REMOVE REPOSITORY DEBUG ===");
+    console.log("Remove button clicked for repository:", repo);
+    
+    if (!repo || !repo.id) {
+      console.error("Invalid repository object:", repo);
+      alert("Cannot remove this repository: Invalid repository data");
+      return;
+    }
+    
+    console.log("Repository ID:", repo.id);
+    console.log("Repository name:", repo.name);
+    
+    // Make a local copy of the repository object to avoid reference issues
+    repoToRemove = {...repo};
     showRemoveRepoModal = true;
+    
+    console.log("Modal state set:");
+    console.log("- showRemoveRepoModal =", showRemoveRepoModal);
+    console.log("- repoToRemove =", repoToRemove);
   }
 
   // Function to confirm repository removal
   async function confirmRemoveRepo() {
-    if (!repoToRemove) return;
+    console.log("=== CONFIRM REMOVE REPOSITORY DEBUG ===");
+    console.log("confirmRemoveRepo called");
+    console.log("repoToRemove value:", repoToRemove);
+    
+    if (!repoToRemove || !repoToRemove.id) {
+      console.error("repoToRemove is null or undefined or missing ID");
+      alert("Repository information is missing. Please try again.");
+      showRemoveRepoModal = false;
+      repoToRemove = null;
+      return;
+    }
+    
+    // Store the repo ID and name for reference after removal
+    const removedId = repoToRemove.id;
+    const removedName = repoToRemove.name || "Unknown";
     
     try {
       console.log("Confirmed removal of repository with ID:", repoToRemove.id);
-      await RemoveGitRepo(repoToRemove.id);
-      console.log("Repository removed successfully, refreshing list");
       
-      // Close the modal
+      // First close the modal to improve UI responsiveness
       showRemoveRepoModal = false;
-      repoToRemove = null;
       
-      // Refresh the repo list
-      await loadGitRepos();
+      // Show a temporary notification
+      const notification = document.createElement('div');
+      notification.className = 'notification removing';
+      notification.innerHTML = `<div>Removing repository "${removedName}"...</div>`;
+      document.body.appendChild(notification);
+      
+      // Call the backend API to remove the repository
+      const result = await RemoveGitRepo(removedId);
+      console.log("Repository removal API call completed", result);
+      
+      // Update the UI by filtering out the removed repository
+      gitRepos = gitRepos.filter(repo => repo.id !== removedId);
+      
+      // Replace the notification with a success message
+      notification.className = 'notification success';
+      notification.innerHTML = `<div>Repository "${removedName}" has been successfully removed.</div>`;
+      
+      // Remove the notification after 3 seconds
+      setTimeout(() => {
+        if (notification && notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 3000);
+      
+      console.log("Repository list updated");
     } catch (error) {
       console.error('Error removing Git repository:', error);
       alert(`Error removing repository: ${error.message || 'Unknown error'}`);
+      
+      // Refresh the repo list in case of an error to ensure UI consistency
+      await loadGitRepos();
+    } finally {
+      // Ensure modal is closed and reference is cleared
+      showRemoveRepoModal = false;
+      repoToRemove = null;
     }
   }
 
   // Function to cancel repository removal
   function cancelRemoveRepo() {
+    console.log("=== CANCEL REMOVE REPOSITORY DEBUG ===");
     console.log("Repository removal cancelled by user");
     showRemoveRepoModal = false;
     repoToRemove = null;
+    console.log("Modal closed, repoToRemove set to null");
   }
 
   // Reset the add repository form
@@ -1293,10 +1351,10 @@
             <div class="request-section">
               <div class="form-group">
                 <label for="api-url">URL</label>
-                <input type="text" id="api-url" bind:value={apiRequest.url} placeholder="https://api.example.com/endpoint" />
+                <input type="text" id="api-url" bind:value={apiRequest.url} placeholder="https://example.com/api" />
               </div>
               <div class="form-row">
-                <div class="form-group">
+                <div class="form-group" style="flex: 1;">
                   <label for="api-method">Method</label>
                   <select id="api-method" bind:value={apiRequest.method}>
                     <option value="GET">GET</option>
@@ -1306,36 +1364,40 @@
                     <option value="PATCH">PATCH</option>
                   </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="flex: 1;">
                   <label for="api-timeout">Timeout (seconds)</label>
                   <input type="number" id="api-timeout" bind:value={apiRequest.timeout} min="1" max="60" />
                 </div>
               </div>
               <div class="form-group">
                 <label for="api-headers">Headers (JSON)</label>
-                <textarea id="api-headers" bind:value={headersJson} rows="3"></textarea>
+                <textarea id="api-headers" bind:value={headersJson} rows="5" placeholder="Enter JSON headers here"></textarea>
               </div>
               <div class="form-group">
                 <label for="api-body">Request Body</label>
-                <textarea id="api-body" bind:value={apiRequest.body} rows="5" placeholder="Request body (JSON, XML, etc.)"></textarea>
+                <textarea id="api-body" bind:value={apiRequest.body} rows="8" placeholder="Request body (leave empty for GET requests)"></textarea>
               </div>
-              <div class="form-actions">
-                <button class="btn btn-primary" on:click={handleSendAPIRequest} disabled={isSendingRequest}>
-                  {isSendingRequest ? 'Sending...' : 'Send Request'}
-                </button>
-              </div>
+              <button class="btn btn-primary" on:click={handleSendAPIRequest} disabled={isSendingRequest}>
+                {isSendingRequest ? 'Sending...' : 'Send Request'}
+              </button>
             </div>
             <div class="response-section">
               <h3>Response</h3>
-              {#if apiResponse}
-                <div class="response-header">
+              {#if isSendingRequest}
+                <div class="loading">Sending request...</div>
+              {:else if apiResponse}
+                <div class="response-status">
                   <span class="status-code {apiResponse.statusCode >= 200 && apiResponse.statusCode < 300 ? 'success' : apiResponse.statusCode >= 400 ? 'error' : 'warning'}">
-                    {apiResponse.statusCode} {apiResponse.status}
+                    {apiResponse.statusCode}
                   </span>
-                  <span class="duration">{apiResponse.duration} ms</span>
+                  <span class="status-text">{apiResponse.status}</span>
+                  <span class="response-time">({apiResponse.duration} ms)</span>
                 </div>
                 {#if apiResponse.error}
-                  <div class="response-error">{apiResponse.error}</div>
+                  <div class="response-error">
+                    <h4>Error</h4>
+                    <pre style="text-align: left; color: #f44336;">{apiResponse.error}</pre>
+                  </div>
                 {:else}
                   <div class="response-headers">
                     <h4>Headers</h4>
@@ -2611,5 +2673,36 @@
   @keyframes spin {
     0% { transform: translate(-50%, -50%) rotate(0deg); }
     100% { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+
+  /* Notification styling */
+  .notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    font-size: 0.9rem;
+    animation: fadeIn 0.3s ease;
+    transition: all 0.3s ease;
+  }
+
+  .notification.removing {
+    background-color: #ffefcc;
+    border-left: 4px solid #ffc107;
+    color: #8a6d3b;
+  }
+
+  .notification.success {
+    background-color: #d4edda;
+    border-left: 4px solid #28a745;
+    color: #155724;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>
